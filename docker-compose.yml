@@ -1,0 +1,114 @@
+services:
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: orgbot-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/orgbot_dev
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_auth__minimum__password__length: "5"
+      NEO4J_dbms_memory_heap_initial__size: 512m
+      NEO4J_dbms_memory_heap_max__size: 1G
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  chromadb:
+    image: chromadb/chroma:0.5.23
+    container_name: orgbot-chroma
+    ports:
+      - "8001:8000"
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ANONYMIZED_TELEMETRY: "FALSE"
+    volumes:
+      - chroma_data:/chroma/chroma
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  postgres:
+    image: postgres:16
+    container_name: orgbot-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: orgbot
+      POSTGRES_PASSWORD: orgbot_dev
+      POSTGRES_DB: orgbot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orgbot -d orgbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: .
+    container_name: orgbot-api
+    ports:
+      - "8000:8000"
+    environment:
+      ORGBOT_STORES__GRAPH__NEO4J__URI: bolt://neo4j:7687
+      ORGBOT_STORES__GRAPH__NEO4J__USER: neo4j
+      ORGBOT_STORES__GRAPH__NEO4J__PASSWORD: orgbot_dev
+      ORGBOT_STORES__VECTOR__CHROMA__HOST: chromadb
+      ORGBOT_STORES__VECTOR__CHROMA__PORT: "8000"
+      ORGBOT_STORES__FEEDBACK__POSTGRES__DSN: postgresql://orgbot:orgbot_dev@postgres:5432/orgbot
+      ORGBOT_INGESTION__DATA_DIR: /data/simulated
+      ORGBOT_LLM__BASE_URL: http://host.docker.internal:11434
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  slackbot:
+    build: .
+    container_name: orgbot-slackbot
+    command: ["python", "-m", "services.slackbot.app"]
+    environment:
+      ORGBOT_STORES__GRAPH__NEO4J__URI: bolt://neo4j:7687
+      ORGBOT_STORES__GRAPH__NEO4J__USER: neo4j
+      ORGBOT_STORES__GRAPH__NEO4J__PASSWORD: orgbot_dev
+      ORGBOT_STORES__VECTOR__CHROMA__HOST: chromadb
+      ORGBOT_STORES__VECTOR__CHROMA__PORT: "8000"
+      ORGBOT_STORES__FEEDBACK__POSTGRES__DSN: postgresql://orgbot:orgbot_dev@postgres:5432/orgbot
+      ORGBOT_INGESTION__DATA_DIR: /data/simulated
+      ORGBOT_LLM__BASE_URL: http://host.docker.internal:11434
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+volumes:
+  neo4j_data:
+  chroma_data:
+  postgres_data:

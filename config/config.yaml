@@ -1,0 +1,84 @@
+stores:
+  vector:
+    provider: chroma
+    chroma:
+      persist_dir: data/chroma
+      collection: orgbot_chunks
+      host: localhost
+      port: 8001
+  graph:
+    provider: neo4j
+    neo4j:
+      uri: bolt://localhost:7687
+      user: neo4j
+      password: orgbot_dev
+      database: neo4j
+  feedback:
+    provider: postgres
+    postgres:
+      dsn: postgresql://orgbot:orgbot_dev@localhost:5432/orgbot
+
+llm:
+  provider: ollama
+  model: llama3.2:3b
+  base_url: http://localhost:11434
+  api_key_env: ANTHROPIC_API_KEY
+  max_tokens: 1024
+  temperature: 0.2
+
+embedding:
+  provider: voyage3
+  model: voyage-3
+  api_key_env: VOYAGE_API_KEY
+  fallback_provider: openai
+  fallback_model: text-embedding-3-small
+  fallback_api_key_env: OPENAI_API_KEY
+  dim: 1024
+
+ingestion:
+  chunk_size: 512
+  chunk_overlap: 50
+  top_k: 8
+  data_dir: data/simulated
+
+feedback:
+  priority_bonus: 0.05
+  golden_priority: high
+  approval_match_threshold: 0.6
+
+slack:
+  source: simulated
+  socket_mode: true
+  bot_token_env: SLACK_BOT_TOKEN
+  app_token_env: SLACK_APP_TOKEN
+  signing_secret_env: SLACK_SIGNING_SECRET
+  channels: []
+  messages_fetch_limit: 100
+
+sync:
+  slack:
+    interval_minutes: 15
+  git:
+    interval_minutes: 60
+  incidents:
+    interval_minutes: 1440
+
+confidence:
+  weights:
+    source_diversity: 0.25
+    recency: 0.20
+    embedding_similarity: 0.25
+    graph_connectivity: 0.15
+    sme_validation: 0.15
+  thresholds:
+    low: 0.4
+    high: 0.7
+  calibrated_weights_path: data/calibrated_weights.json
+
+api:
+  host: 0.0.0.0
+  port: 8000
+
+paths:
+  chroma: data/chroma
+  simulated: data/simulated
